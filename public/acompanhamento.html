@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Acompanhar Entrega</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+  <h2>📦 Acompanhando entrega</h2>
+
+  <p id="status">Conectando...</p>
+
+  <script>
+    const socket = io("http://localhost:3000")
+
+    socket.on("connect", () => {
+      document.getElementById("status").innerText = "Conectado "
+    })
+
+    socket.on("localizacaoAtualizada", (data) => {
+      console.log("Localização:", data)
+
+      document.getElementById("status").innerText =
+        "Lat: " + data.lat + " | Lng: " + data.lng
+    })
+  </script>
+</body>
+</html>
