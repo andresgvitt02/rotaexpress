@@ -34,4 +34,9 @@ router.get('/acompanhar/:token', async (req, res) => {
   }
 })
 
+router.get(
+  '/rota',
+  pedidosController.buscarRota
+)
+
 module.exports = router

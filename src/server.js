@@ -1,7 +1,9 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const http = require('http')
 const { Server } = require('socket.io')
+
 
 const authRoutes = require('./routes/authRoutes')
 const pedidosRoutes = require('./routes/pedidosRoutes')

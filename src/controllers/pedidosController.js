@@ -1,5 +1,6 @@
 const pool = require('../config/db')
 const { v4: uuidv4 } = require('uuid') // importar uuid
+const axios = require('axios')
 
 exports.criarPedido = async (req, res) => {
   const { restaurante_id, endereco_coleta, endereco_entrega, valor_entrega } = req.body
@@ -80,5 +81,50 @@ exports.concluirPedido = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ error: "Erro ao concluir entrega" })
+  }
+}
+
+exports.buscarRota = async (req, res) => {
+
+  const {
+    origemLat,
+    origemLng,
+    destinoLat,
+    destinoLng
+  } = req.query
+
+  try {
+
+    const response =
+      await axios.get(
+        "https://maps.googleapis.com/maps/api/directions/json",
+        {
+          params: {
+
+            origin:
+              `${origemLat},${origemLng}`,
+
+            destination:
+              `${destinoLat},${destinoLng}`,
+
+            mode: "driving",
+
+            key:
+              process.env.GOOGLE_API_KEY,
+
+          }
+        }
+      )
+
+    res.json(
+      response.data,
+    )
+
+  } catch (error) {
+
+    res.status(500).json({
+      error: "Erro ao buscar rota"
+    })
+
   }
 }
