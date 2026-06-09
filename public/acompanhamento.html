@@ -1,28 +1,175 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-  <title>Acompanhar Entrega</title>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acompanhar Pedido</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .topo {
+      background: #ff3b30;
+      color: white;
+      padding: 16px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      position: relative;
+      z-index: 11;
+    }
+
+    #map {
+      width: 100%;
+      height: calc(100vh - 56px);
+      position: absolute;
+      top: 56px;
+      left: 0;
+      background-color: #e5e3df;
+    }
+
+    .status-card {
+      position: absolute;
+      top: 76px;
+      left: 20px;
+      right: 20px;
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 10;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .status-titulo {
+      display: block;
+      font-weight: bold;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .status-subtitulo {
+      font-size: 13px;
+      color: #666;
+      margin-top: 4px;
+      display: block;
+    }
+  </style>
 </head>
-
 <body>
-  <h2>📦 Acompanhando entrega</h2>
 
-  <p id="status">Conectando...</p>
+<div class="topo">
+  Acompanhamento em tempo real
+</div>
 
-  <script>
-    const socket = io("http://localhost:3000")
+<div class="status-card">
+  <span class="status-titulo" id="texto-status">Seu pedido está a caminho!</span>
+  <span class="status-subtitulo">Acompanhe o motoboy no mapa abaixo.</span>
+  
+  <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; color: #555; font-weight: bold;">Código para o Motoboy:</span>
+    <span id="codigo-validacao-tela" style="font-size: 18px; font-weight: bold; color: #ff3b30; background: #ffebeb; padding: 4px 10px; border-radius: 6px; letter-spacing: 1px;">----</span>
+  </div>
+</div>
 
-    socket.on("connect", () => {
-      document.getElementById("status").innerText = "Conectado "
-    })
+<div id="map"></div>
 
-    socket.on("localizacaoAtualizada", (data) => {
-      console.log("Localização:", data)
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-      document.getElementById("status").innerText =
-        "Lat: " + data.lat + " | Lng: " + data.lng
-    })
-  </script>
+<script>
+  let map = null;
+  let marker = null;
+
+  // PEGA O TOKEN SEGURO DA URL
+  const partesUrl = window.location.pathname.split("/");
+  const token = partesUrl[partesUrl.length - 1];
+  console.log("TOKEN DO PEDIDO:", token);
+
+  // 🔥 NOVO: Busca o código PIN no seu servidor (Sem IP fixo, usa URL relativa)
+  async function carregarDadosDoPedido() {
+    try {
+      const resposta = await fetch(`/pedido-token/${token}`);
+      if (!resposta.ok) return;
+      
+      const pedido = await resposta.json();
+      
+      // Coloca o código real do banco na tela do cliente
+      document.getElementById("codigo-validacao-tela").innerText = pedido.codigo_validacao || "****";
+    } catch (e) {
+      console.error("Erro ao carregar dados do pedido:", e);
+    }
+  }
+
+  // Chama a função assim que a página abre
+  carregarDadosDoPedido();
+
+  // CONECTA NO SEU SERVIDOR (Sem IP fixo, descobre sozinho)
+  const socket = io();
+
+  // FUNÇÃO QUE O GOOGLE VAI CHAMAR AUTOMATICAMENTE ASSIM QUE CARREGAR
+  function initMap() {
+    console.log("GOOGLE MAPS API CARREGADA COM SUCESSO");
+    
+    const posicaoInicial = { lat: -29.5354, lng: -50.0699 };
+
+    map = new google.maps.Map(document.getElementById("map"), {
+      zoom: 16,
+      center: posicaoInicial,
+      disableDefaultUI: true,
+      zoomControl: true,
+    });
+
+    marker = new google.maps.Marker({
+      position: posicaoInicial,
+      map: map,
+      title: "Motoboy",
+      icon: {
+        url: "https://cdn-icons-png.flaticon.com/512/2972/2972185.png",
+        scaledSize: new google.maps.Size(45, 45),
+        origin: new google.maps.Point(0, 0),
+        anchor: new google.maps.Point(22, 22)
+      }
+    });
+  }
+
+  // ASSIM QUE CONECTAR, ENVIA O TOKEN PRO SERVIDOR
+  socket.on("connect", () => {
+    console.log("SOCKET CONECTADO. Enviando token:", token);
+    socket.emit("entrarPedidoTracking", token);
+  });
+
+  // ESCUTA A LOCALIZAÇÃO EM TEMPO REAL
+  socket.on("localizacaoAtualizada", (data) => {
+    console.log("LOCALIZAÇÃO RECEBIDA DO SERVER:", data);
+
+    if (!map || !marker) return; 
+
+    const novaPosicao = {
+      lat: Number(data.latitude),
+      lng: Number(data.longitude),
+    };
+
+    marker.setPosition(novaPosicao);
+    map.panTo(novaPosicao);
+  });
+
+  // ESCUTA ATUALIZAÇÃO DE STATUS
+  socket.on("statusAtualizado", (data) => {
+    console.log("STATUS ATUALIZADO:", data);
+    const elementoTexto = document.getElementById("texto-status");
+    if (elementoTexto) {
+      elementoTexto.innerText = `Status do Pedido: ${data.status}`;
+    }
+  });
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFbTV2_V-iYPYinlnWNn6wApvkneRHUbc&callback=initMap"></script>
+
 </body>
 </html>
