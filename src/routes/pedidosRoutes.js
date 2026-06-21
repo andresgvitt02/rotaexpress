@@ -9,7 +9,12 @@ router.get('/pedidos', pedidosController.listarPedidos)
 router.put('/pedidos/:id/aceitar', pedidosController.aceitarPedido)
 router.put('/pedidos/:id/concluir', pedidosController.concluirPedido)
 
-// 🔥 ROTA DE ACOMPANHAMENTO (Entrega o HTML)
+router.put('/pedidos/:id/status', pedidosController.atualizarStatus)
+
+// NOVA ROTA: Recebe a localização do Flutter e aciona o Socket.IO
+router.put('/pedidos/:id/localizacao', pedidosController.atualizarLocalizacao)
+
+// ROTA DE ACOMPANHAMENTO (Entrega o HTML)
 router.get('/acompanhar/:token', async (req, res) => {
   const { token } = req.params
 
@@ -35,7 +40,7 @@ router.get('/acompanhar/:token', async (req, res) => {
 
 router.get('/rota', pedidosController.buscarRota)
 
-// 🔥 ROTA DA API DO TRACKING (Usada pelo HTML para ler os dados)
+// ROTA DA API DO TRACKING (Usada pelo HTML para ler os dados)
 router.get("/pedido-token/:token", async (req, res) => {
   const { token } = req.params;
 

@@ -70,7 +70,7 @@
 
 <div class="status-card">
   <span class="status-titulo" id="texto-status">Seu pedido está a caminho!</span>
-  <span class="status-subtitulo">Acompanhe o motoboy no mapa abaixo.</span>
+  <span class="status-subtitulo" id="texto-subtitulo">Acompanhe o motoboy no mapa abaixo.</span>
   
   <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
     <span style="font-size: 13px; color: #555; font-weight: bold;">Código para o Motoboy:</span>
@@ -85,13 +85,17 @@
 <script>
   let map = null;
   let marker = null;
+  let pedidoIdGlobal = null; // Guarda o ID do pedido para validar o Socket
 
   // PEGA O TOKEN SEGURO DA URL
   const partesUrl = window.location.pathname.split("/");
   const token = partesUrl[partesUrl.length - 1];
   console.log("TOKEN DO PEDIDO:", token);
 
-  // 🔥 NOVO: Busca o código PIN no seu servidor (Sem IP fixo, usa URL relativa)
+  // CONECTA NO SERVIDOR SOCKET.IO
+  const socket = io();
+
+  // Busca o código PIN e o ID no seu servidor
   async function carregarDadosDoPedido() {
     try {
       const resposta = await fetch(`/pedido-token/${token}`);
@@ -99,18 +103,39 @@
       
       const pedido = await resposta.json();
       
+      pedidoIdGlobal = pedido.id; // Salva o ID real vindo do banco de dados
+
       // Coloca o código real do banco na tela do cliente
       document.getElementById("codigo-validacao-tela").innerText = pedido.codigo_validacao || "****";
+
+      // Altera o texto inicial dinamicamente se o pedido já estiver com status de entregue no banco
+      if (pedido.status === 'entregue') {
+        marcarComoEntregue();
+      }
+
+      // 💡 Se o socket já estiver conectado na hora que a API responder, garante a entrada na sala pelo ID
+      if (socket.connected) {
+        enviarRegistroGatilho();
+      }
+
     } catch (e) {
       console.error("Erro ao carregar dados do pedido:", e);
     }
   }
 
-  // Chama a função assim que a página abre
-  carregarDadosDoPedido();
+  // Função auxiliar para registrar no servidor a escuta desse pedido
+  function enviarRegistroGatilho() {
+    console.log("Registrando escuta do tracking no Socket para o token:", token);
+    socket.emit("entrarPedidoTracking", token);
+    
+    // Se o backend preferir registrar direto por ID, garante o envio do ID também
+    if (pedidoIdGlobal) {
+      socket.emit("joinPedidoRoom", pedidoIdGlobal); 
+    }
+  }
 
-  // CONECTA NO SEU SERVIDOR (Sem IP fixo, descobre sozinho)
-  const socket = io();
+  // Chama a função assim que a página abre para carregar os dados iniciais
+  carregarDadosDoPedido();
 
   // FUNÇÃO QUE O GOOGLE VAI CHAMAR AUTOMATICAMENTE ASSIM QUE CARREGAR
   function initMap() {
@@ -138,15 +163,18 @@
     });
   }
 
-  // ASSIM QUE CONECTAR, ENVIA O TOKEN PRO SERVIDOR
+  // ASSIM QUE CONECTAR O SOCKET, INFORMA AO SERVIDOR
   socket.on("connect", () => {
-    console.log("SOCKET CONECTADO. Enviando token:", token);
-    socket.emit("entrarPedidoTracking", token);
+    console.log("SOCKET CONECTADO COM SUCESSO.");
+    enviarRegistroGatilho();
   });
 
   // ESCUTA A LOCALIZAÇÃO EM TEMPO REAL
   socket.on("localizacaoAtualizada", (data) => {
     console.log("LOCALIZAÇÃO RECEBIDA DO SERVER:", data);
+
+    // Garante que a localização recebida pertence estritamente ao pedido aberto na tela
+    if (pedidoIdGlobal && data.pedidoId != pedidoIdGlobal) return;
 
     if (!map || !marker) return; 
 
@@ -159,14 +187,48 @@
     map.panTo(novaPosicao);
   });
 
-  // ESCUTA ATUALIZAÇÃO DE STATUS
+  // ESCUTA ATUALIZAÇÃO DE STATUS (Se o motoboy mudar status no app)
   socket.on("statusAtualizado", (data) => {
     console.log("STATUS ATUALIZADO:", data);
+    
+    if (pedidoIdGlobal && data.pedidoId != pedidoIdGlobal) return;
+
     const elementoTexto = document.getElementById("texto-status");
     if (elementoTexto) {
-      elementoTexto.innerText = `Status do Pedido: ${data.status}`;
+      if (data.status === 'entregue') {
+        marcarComoEntregue();
+      } else {
+        elementoTexto.innerText = `Status do Pedido: ${data.status.toUpperCase()}`;
+      }
     }
   });
+
+  // ESCUTA QUANDO O PEDIDO FOR FINALIZADO COM O CÓDIGO
+  socket.on("pedidoConcluido", (data) => {
+    console.log("PEDIDO CONCLUÍDO RECEBIDO:", data);
+    
+    // Verifica se o aviso do servidor é exatamente para este pedido
+    if (data.pedidoId == pedidoIdGlobal) {
+      marcarComoEntregue();
+      // Dispara o alerta visual na tela
+      setTimeout(() => {
+        alert("Entrega concluída com sucesso! Bom apetite! 🎉");
+      }, 300);
+    }
+  });
+
+  // Função interna para centralizar a mudança visual de sucesso
+  function marcarComoEntregue() {
+    const titulo = document.getElementById("texto-status");
+    if (titulo) {
+      titulo.innerText = "🎉 Pedido Entregue!";
+      titulo.style.color = "#4CAF50"; // Altera a cor para verde descritivo
+    }
+    const subtitulo = document.getElementById("texto-subtitulo");
+    if (subtitulo) {
+      subtitulo.innerText = "Sua entrega foi concluída. Bom apetite!";
+    }
+  }
 </script>
 
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFbTV2_V-iYPYinlnWNn6wApvkneRHUbc&callback=initMap"></script>
